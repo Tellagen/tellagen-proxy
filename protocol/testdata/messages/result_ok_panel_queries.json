@@ -1,0 +1,7 @@
+{
+  "attempt_token": "at_ka", "status": "ok", "duration_ms": 45,
+  "data": {"kind": "panel_queries",
+           "panel_queries": [{"panel_id": 4, "title": "p95 latency", "datasource_uid": "prom-prod",
+                              "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))"}]},
+  "truncated": false, "bytes": 150, "redactions": 0
+}

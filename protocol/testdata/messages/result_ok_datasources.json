@@ -1,0 +1,6 @@
+{
+  "attempt_token": "at_k8", "status": "ok", "duration_ms": 30,
+  "data": {"kind": "datasources",
+           "datasources": [{"uid": "prom-prod", "name": "Prometheus prod", "type": "prometheus", "default": true}]},
+  "truncated": false, "bytes": 90, "redactions": 0
+}

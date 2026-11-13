@@ -1,0 +1,13 @@
+{
+  "instance_id": "tellagen-proxy-7c9f-xk2p",
+  "wait_ms": 25000,
+  "mode": "long_poll",
+  "free_slots": 1,
+  "applied_policy_revision": "srv-7",
+  "in_flight": [{"command_id": "cmd_01JD", "attempt": 1, "elapsed_ms": 2300}],
+  "sources_health": [
+    {"key": "grafana-main", "health": "ok", "checked_at": "2026-11-04T10:19:48Z"},
+    {"key": "grafana-other", "health": "unavailable", "code": "auth_failed",
+     "message": "Grafana rejected the token (401)."}
+  ]
+}

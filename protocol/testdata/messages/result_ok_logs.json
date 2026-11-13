@@ -1,0 +1,8 @@
+{
+  "attempt_token": "at_k5", "status": "ok", "duration_ms": 1100,
+  "data": {"kind": "logs", "lines_total": 20,
+           "lines": [{"at": "2026-11-04T14:18:02Z", "labels": {"app": "checkout-api"},
+                      "text": "connection pool exhausted for user [email]"}]},
+  "truncated": true, "bytes": 4200, "redactions": 5,
+  "redactions_by_kind": {"email": 2, "ip": 3}
+}

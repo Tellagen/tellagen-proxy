@@ -1,0 +1,9 @@
+{
+  "attempt_token": "at_kc", "status": "partial", "duration_ms": 2400,
+  "data": {"kind": "matrix", "series_total": 37,
+           "series": [{"labels": {"pod": "checkout-api-7d9f"}, "start": "2026-11-04T13:09:00Z", "step_s": 30,
+                       "values": [0.21, 0.22]}]},
+  "skipped": ["27 series over the limit of 10"],
+  "truncated": true, "bytes": 32768, "redactions": 1,
+  "redactions_by_kind": {"token": 1}
+}

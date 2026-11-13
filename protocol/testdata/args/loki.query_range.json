@@ -1,0 +1,2 @@
+{"datasource_uid": "loki-prod", "expr": "sum(count_over_time({app=\"checkout-api\"} |= \"connection pool exhausted\" [1m]))",
+ "start": "2026-11-04T13:09:00Z", "end": "2026-11-04T15:00:00Z", "step_s": 60}

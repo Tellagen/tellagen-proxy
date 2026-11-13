@@ -1,0 +1,53 @@
+{
+  "schema": "tellagen.proxy.hello/v1",
+  "proxy_version": "1.0.0",
+  "protocol_versions": ["1"],
+  "instance_id": "tellagen-proxy-7c9f-xk2p",
+  "install_method": "helm",
+  "labels": {"env": "production", "cluster": "prod-eu-1"},
+  "capabilities": [
+    {"name": "prometheus.query_range", "version": 1,
+     "limits": {"max_range_s": 86400, "max_points": 500, "max_series": 20,
+                "timeout_ms": 60000, "max_result_bytes": 65536}},
+    {"name": "loki.query_range", "version": 1,
+     "limits": {"max_range_s": 21600, "max_lines": 50, "max_line_chars": 500}},
+    {"name": "loki.query_patterns", "version": 1,
+     "limits": {"max_patterns": 5}},
+    {"name": "grafana.list_datasources", "version": 1,
+     "limits": {"max_items": 100}}
+  ],
+  "capabilities_digest": "sha256:9f2c",
+  "policy_revision": "sha256:41ab",
+  "policy": {
+    "datasource_uids": ["prom-prod", "loki-prod"],
+    "max_commands_per_run": 100,
+    "redaction_allow_off": false,
+    "capped": [
+      {"setting": "redaction", "requested": "off", "applied": "on", "reason": "policy_file"}
+    ]
+  },
+  "executor": {"kind": "grafana-mcp", "version": "v2.2.0", "mode": "in-process"},
+  "doctor": {
+    "tls": "ok",
+    "grafana": "ok",
+    "grafana_latency_ms": 42,
+    "grafana_role": "Viewer",
+    "warnings": ["viewer_all_datasources"],
+    "failures": [
+      {"check": "grafana_datasource", "code": "datasource_unreachable",
+       "message": "loki-prod did not answer a labels query."}
+    ]
+  },
+  "sources": [{
+    "key": "grafana-main",
+    "public_url": "https://grafana.customerdomain.net",
+      "public_url_network": "private",
+    "grafana_version": "12.2.1",
+    "health": "ok",
+    "datasources": [
+      {"uid": "prom-prod", "name": "Prometheus prod", "type": "prometheus", "default": true},
+      {"uid": "loki-prod", "name": "Loki prod", "type": "loki", "default": true},
+      {"uid": "prom-billing", "name": "Prometheus billing", "type": "prometheus"}
+    ]
+  }]
+}

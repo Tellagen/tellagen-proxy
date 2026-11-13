@@ -1,0 +1,11 @@
+{
+  "protocol_version": "1",
+  "status": "active",
+  "poll": {"wait_ms": 25000},
+  "server_time": "2026-11-04T10:20:00Z",
+  "policy": {
+    "revision": "srv-7",
+    "narrow": {"datasource_uids": []},
+    "data": {"metrics": "points", "log_lines": 0, "redaction": "on"}
+  }
+}

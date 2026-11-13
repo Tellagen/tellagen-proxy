@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {"type": "command", "command_id": "cmd_01JE", "attempt": 1, "attempt_token": "at_k3",
+     "run_id": "inv_8f1", "incident_ref": "INC-2207",
+     "initiator": {"kind": "user", "id": "u_311"},
+     "capability": "prometheus.query_range", "capability_version": 1,
+     "args": {"datasource_uid": "prom-prod",
+              "expr": "sum(hikaricp_connections_active{service=\"checkout-api\"})",
+              "start": "2026-11-04T13:09:00Z", "end": "2026-11-04T15:00:00Z", "step_s": 30},
+     "limits": {"timeout_ms": 15000, "max_series": 10, "max_points": 240, "max_result_bytes": 32768},
+     "deadline_ms": 20000, "lease_ms": 30000},
+    {"type": "cancel", "command_id": "cmd_01JD", "reason": "run_cancelled"},
+    {"type": "policy_update", "revision": "srv-8",
+     "narrow": {"datasource_uids": ["prom-prod", "loki-prod"],
+                "limits": {"prometheus": {"max_range_s": 86400, "timeout_ms": 20000, "max_series": 10},
+                           "loki": {"max_range_s": 21600, "timeout_ms": 20000, "max_lines": 3}},
+                "max_commands_per_run": 40},
+     "data": {"metrics": "points", "log_lines": 0, "redaction": "on",
+              "extra_rules": [{"kind": "key", "key": "customer"},
+                              {"kind": "pattern", "regex": "ACC-\\d{5}-EE"}]}}
+  ]
+}

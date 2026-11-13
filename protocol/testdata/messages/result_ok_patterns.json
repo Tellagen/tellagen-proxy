@@ -1,0 +1,8 @@
+{
+  "attempt_token": "at_k6", "status": "ok", "duration_ms": 900,
+  "data": {"kind": "patterns",
+           "patterns": [{"pattern": "connection pool exhausted <_>", "count": 1912,
+                         "first_seen": "2026-11-04T14:04:10Z"},
+                        {"pattern": "request failed status=<_>", "count": 88}]},
+  "truncated": false, "bytes": 310, "redactions": 0
+}

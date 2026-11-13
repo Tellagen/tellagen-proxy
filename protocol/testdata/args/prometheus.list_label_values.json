@@ -1,0 +1,1 @@
+{"datasource_uid": "prom-prod", "label": "service", "match": "http_requests_total"}

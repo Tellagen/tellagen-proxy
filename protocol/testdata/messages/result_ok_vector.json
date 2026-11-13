@@ -1,0 +1,6 @@
+{
+  "attempt_token": "at_k4", "status": "ok", "duration_ms": 41,
+  "data": {"kind": "vector", "series_total": 1,
+           "samples": [{"labels": {"job": "checkout-api"}, "value": 1, "at": "2026-11-04T14:41:12Z"}]},
+  "truncated": false, "bytes": 120, "redactions": 0
+}

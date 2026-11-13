@@ -1,0 +1,5 @@
+{
+  "attempt_token": "at_kd", "status": "error", "duration_ms": 15000,
+  "truncated": false, "bytes": 0, "redactions": 0,
+  "error": {"code": "timeout", "message": "Loki prod did not answer in 15 s", "retryable": true}
+}

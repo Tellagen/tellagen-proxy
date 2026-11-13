@@ -1,0 +1,19 @@
+{
+  "attempt_token": "at_k3", "status": "ok", "duration_ms": 310,
+  "data": {
+    "kind": "matrix", "series_total": 1,
+    "series": [{
+      "labels": {"service": "checkout-api"},
+      "start": "2026-11-04T13:09:00Z", "step_s": 30,
+      "values": [38, 39, 38, 41, null, 100, 100],
+      "stats": {"min": 36, "max": 100, "avg": 71.4, "first": 38, "last": 40,
+                "max_at": "2026-11-04T14:04:00Z"}
+    }],
+    "downsampled_from_points": 223
+  },
+  "truncated": false, "bytes": 2960, "redactions": 0,
+  "query_fingerprint": "sha256:77d0",
+  "executed_via": "grafana-mcp:query_prometheus@v2.2.0",
+  "deep_link": {"kind": "grafana_explore",
+                "url": "https://grafana.customerdomain.net/explore?schemaVersion=1&panes=x"}
+}

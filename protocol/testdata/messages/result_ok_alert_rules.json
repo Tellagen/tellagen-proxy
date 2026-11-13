@@ -1,0 +1,7 @@
+{
+  "attempt_token": "at_kb", "status": "ok", "duration_ms": 50,
+  "data": {"kind": "alert_rules",
+           "alert_rules": [{"uid": "latency-high", "title": "CheckoutLatencyHigh", "state": "firing",
+                            "expr": "job:latency:p95 > 0.5"}]},
+  "truncated": false, "bytes": 110, "redactions": 0
+}

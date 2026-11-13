@@ -1,0 +1,6 @@
+{
+  "attempt_token": "at_k3", "status": "rejected", "duration_ms": 0,
+  "truncated": false, "bytes": 0, "redactions": 0,
+  "error": {"code": "policy_range_exceeded", "message": "range 48h exceeds 24h", "retryable": false,
+            "hint": {"max_range_s": 86400}}
+}

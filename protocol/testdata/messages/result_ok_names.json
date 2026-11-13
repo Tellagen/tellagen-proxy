@@ -1,0 +1,5 @@
+{
+  "attempt_token": "at_k7", "status": "ok", "duration_ms": 60,
+  "data": {"kind": "names", "names": ["http_request_duration_seconds_bucket", "hikaricp_connections_active"]},
+  "truncated": false, "bytes": 80, "redactions": 0
+}

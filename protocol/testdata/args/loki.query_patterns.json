@@ -1,0 +1,2 @@
+{"datasource_uid": "loki-prod", "expr": "{app=\"checkout-api\", level=\"error\"}",
+ "start": "2026-11-04T13:09:00Z", "end": "2026-11-04T15:00:00Z"}

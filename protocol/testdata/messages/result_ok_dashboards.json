@@ -1,0 +1,6 @@
+{
+  "attempt_token": "at_k9", "status": "ok", "duration_ms": 35,
+  "data": {"kind": "dashboards",
+           "dashboards": [{"uid": "checkout", "title": "Checkout API", "folder": "Payments"}]},
+  "truncated": false, "bytes": 70, "redactions": 0
+}
