@@ -1,0 +1,11 @@
+# The build reads only what the Dockerfile copies.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
+!protocol
+!redact
+!tools
+**/*_test.go
+**/testdata

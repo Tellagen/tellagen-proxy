@@ -1,0 +1,18 @@
+# Build output
+/bin/
+/tellagen-proxy
+/dist/
+/coverage/
+*.test
+*.out
+
+# Local files
+.DS_Store
+.env
+.env.*
+.idea/
+.vscode/
+*.local.yaml
+CLAUDE.local.md
+.claude/settings.local.json
+node_modules/
