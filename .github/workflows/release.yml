@@ -1,0 +1,310 @@
+# A v* tag builds the image for linux/amd64 and linux/arm64, pushes it to ghcr.io
+# and Docker Hub, signs it with cosign (keyless), and publishes the Helm chart as
+# an OCI chart and as a classic repository at charts.tellagen.com. Running the
+# workflow by hand is a dry run: it builds and packages and publishes nothing.
+#
+# Every action is pinned to a commit, because the release job holds registry
+# credentials. Those credentials live in the `release` environment, so a workflow
+# on a branch cannot read them.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_GHCR: ghcr.io/tellagen/tellagen-proxy
+  IMAGE_DOCKERHUB: docker.io/tellagen/tellagen-proxy
+  CHART_GHCR: ghcr.io/tellagen/charts
+
+jobs:
+  verify:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+
+  dry-run:
+    name: Dry run
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+
+      - name: Build the multi-platform image without pushing it
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=0.0.0-dry-run
+          provenance: mode=max
+          sbom: true
+          push: false
+
+      - name: Package the chart
+        run: scripts/package-chart.sh 0.0.0-dry-run "sha256:$(printf '0%.0s' {1..64})" "$RUNNER_TEMP/chart"
+
+  release:
+    name: Sign and publish
+    needs: verify
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check that the commit of the tag is on master
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse 'HEAD^{commit}')"
+          git merge-base --is-ancestor "$commit" origin/master || { echo "::error::Commit $commit is not on master. A release comes only from a commit on master."; exit 1; }
+
+      - name: Read the version from the tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          semver='^v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?)$'
+          [[ "$TAG" =~ $semver ]] || { echo "::error::The tag $TAG is not v<major>.<minor>.<patch>[-<pre-release>]"; exit 1; }
+          version="${BASH_REMATCH[1]}"
+          tags="${version}"
+          if [[ -z "${BASH_REMATCH[5]}" ]]; then
+            # Only a stable release moves the major and minor tags.
+            tags="${tags},${BASH_REMATCH[2]},${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          fi
+          {
+            printf 'version=%s\n' "$version"
+            printf 'tags=%s\n' "$tags"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Read the release notes before anything is pushed
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          node scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release/RELEASE-NOTES.md"
+
+      - name: Check the registry credentials
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          test -n "$DOCKERHUB_USERNAME" && test -n "$DOCKERHUB_TOKEN" || { echo "::error::The release environment has no secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN."; exit 1; }
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push the image to ghcr.io
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          tags: ${{ env.IMAGE_GHCR }}:${{ steps.version.outputs.version }}
+          provenance: mode=max
+          sbom: true
+          push: true
+
+      - name: Mirror the image to Docker Hub and add the moving tags
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.version.outputs.tags }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          args=()
+          for tag in ${TAGS//,/ }; do
+            args+=(--tag "${IMAGE_DOCKERHUB}:${tag}")
+            [[ "$tag" == "${TAGS%%,*}" ]] || args+=(--tag "${IMAGE_GHCR}:${tag}")
+          done
+          docker buildx imagetools create "${args[@]}" "${IMAGE_GHCR}@${DIGEST}"
+
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: v2.6.5
+
+      - name: Sign the image in both registries
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_GHCR}@${DIGEST}" "${IMAGE_DOCKERHUB}@${DIGEST}"
+
+      - name: Verify the signatures
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+        run: |
+          set -euo pipefail
+          for image in "$IMAGE_GHCR" "$IMAGE_DOCKERHUB"; do
+            cosign verify \
+              --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "${image}@${DIGEST}" >/dev/null
+          done
+
+      - name: Check the SBOM and the build provenance
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          for kind in SBOM Provenance; do
+            docker buildx imagetools inspect "${IMAGE_GHCR}@${DIGEST}" --format "{{ json .${kind} }}" > "$RUNNER_TEMP/release/${kind}.json"
+            jq -e 'type == "object" and length > 0' "$RUNNER_TEMP/release/${kind}.json" >/dev/null
+          done
+
+      - uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+
+      - name: Package the chart with the digest of the signed image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/package-chart.sh "$VERSION" "$DIGEST" "$RUNNER_TEMP/release"
+
+      - name: Push the chart to ghcr.io and sign it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          helm push "$RUNNER_TEMP/release/tellagen-proxy-${VERSION}.tgz" "oci://${CHART_GHCR}"
+          chart_digest="$(docker buildx imagetools inspect "${CHART_GHCR}/tellagen-proxy:${VERSION}" --format '{{ json .Manifest.Digest }}' | tr -d '"')"
+          [[ "$chart_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes "${CHART_GHCR}/tellagen-proxy@${chart_digest}"
+          cosign verify \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${CHART_GHCR}/tellagen-proxy@${chart_digest}" >/dev/null
+
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4
+        with:
+          name: tellagen-proxy-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+          retention-days: 90
+
+  github-release:
+    name: GitHub Release
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: tellagen-proxy-${{ needs.release.outputs.version }}
+          path: ${{ runner.temp }}/assets
+
+      - name: Create the release from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          files=()
+          for file in "$RUNNER_TEMP"/assets/*; do
+            [[ "$file" == */RELEASE-NOTES.md ]] || files+=("$file")
+          done
+          flags=()
+          [[ "$VERSION" == *-* ]] && flags+=(--prerelease)
+          gh release create "$TAG" "${files[@]}" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/assets/RELEASE-NOTES.md" "${flags[@]}"
+
+  classic-repository:
+    name: Classic chart repository
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: https://charts.tellagen.com
+    steps:
+      - uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: tellagen-proxy-${{ needs.release.outputs.version }}
+          path: ${{ runner.temp }}/new
+
+      - name: Add the chart to the published index
+        run: |
+          set -euo pipefail
+          site="$RUNNER_TEMP/site"
+          rm -rf "$site" && mkdir -p "$site"
+          rm -f "$RUNNER_TEMP/previous-index.yaml"
+          # The site holds every version, so fetch the ones the live index lists. A
+          # missing index (404) means this is the first release. Any other answer
+          # stops the job, because a new index built without the old versions would
+          # remove them from the site.
+          status="$(curl --silent --location --output "$RUNNER_TEMP/previous-index.yaml" --write-out '%{http_code}' https://charts.tellagen.com/index.yaml || true)"
+          case "$status" in
+            200)
+              grep -Eo 'https://charts\.tellagen\.com/[A-Za-z0-9._-]+\.tgz' "$RUNNER_TEMP/previous-index.yaml" | sort -u | while read -r url; do
+                curl --fail --silent --show-error --location --output "$site/$(basename "$url")" "$url"
+              done
+              ;;
+            404) rm -f "$RUNNER_TEMP/previous-index.yaml" ;;
+            *) echo "::error::https://charts.tellagen.com/index.yaml answered ${status}. Not publishing without the previous index."; exit 1 ;;
+          esac
+          cp "$RUNNER_TEMP"/new/tellagen-proxy-*.tgz "$site/"
+          if [ -f "$RUNNER_TEMP/previous-index.yaml" ]; then
+            helm repo index "$site" --url https://charts.tellagen.com --merge "$RUNNER_TEMP/previous-index.yaml"
+          else
+            helm repo index "$site" --url https://charts.tellagen.com
+          fi
+
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: ${{ runner.temp }}/site
+
+      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

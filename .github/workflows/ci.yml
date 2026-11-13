@@ -1,0 +1,174 @@
+# Checks for every push to master and every pull request. The release workflow
+# calls this file too, so a tag is released only after the same checks pass.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The compressed size limit of one platform image: 30 MiB.
+  MAX_IMAGE_BYTES: "31457280"
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt formatted. Run gofmt -w on them."
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        with:
+          version: v2.15.0
+          args: --timeout=10m
+
+      - run: go test -race -count=1 ./...
+
+  chart:
+    name: Chart and release scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+
+      - name: Lint the chart in every secret mode
+        run: |
+          for values in helm/tellagen-proxy/ci/*.yaml; do
+            helm lint helm/tellagen-proxy --strict --values "$values"
+          done
+
+      - run: node --test "test/*.test.mjs"
+
+  image:
+    name: Image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build the image for both platforms
+        run: |
+          mkdir -p "$RUNNER_TEMP/image"
+          for platform in amd64 arm64; do
+            docker buildx build \
+              --platform "linux/${platform}" \
+              --build-arg VERSION=0.0.0-ci \
+              --provenance=false --sbom=false \
+              --output "type=oci,dest=$RUNNER_TEMP/image/${platform}.tar" \
+              .
+          done
+
+      - name: Check the size, the user, the binary and the license files
+        run: node scripts/image-check.mjs --max-bytes "$MAX_IMAGE_BYTES" "$RUNNER_TEMP/image/amd64.tar" "$RUNNER_TEMP/image/arm64.tar"
+
+      - name: Run the image
+        run: |
+          id="$(docker load --input "$RUNNER_TEMP/image/amd64.tar" | sed -n -e 's/^Loaded image ID: //p' -e 's/^Loaded image: //p')"
+          test -n "$id"
+          test "$(docker run --rm "$id" version)" = "tellagen-proxy 0.0.0-ci"
+          status=0
+          output="$(docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges "$id" doctor 2>&1)" || status=$?
+          test "$status" -eq 1
+          grep -q "TELLAGEN_PROXY_TOKEN or TELLAGEN_PROXY_TOKEN_FILE is required" <<<"$output"
+
+  changes:
+    name: Changed paths
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      helm: ${{ steps.diff.outputs.helm }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --quiet "$BASE" HEAD -- helm; then
+            echo "helm=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "helm=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Installs the chart in a kind cluster. It runs on a pull request that changes
+  # the chart, and on a tag, because the release needs it.
+  kind:
+    name: Chart in a kind cluster
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.helm == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+
+      - name: Build the image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg VERSION=0.0.0-kind \
+            --provenance=false --sbom=false \
+            --load --tag tellagen-proxy:kind \
+            .
+
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          version: v0.33.0
+          cluster_name: tellagen-proxy-${{ github.run_id }}
+
+      - name: Install the chart and reach a fake Grafana
+        run: |
+          kind load docker-image tellagen-proxy:kind --name "tellagen-proxy-${GITHUB_RUN_ID}"
+          helm/tellagen-proxy/ci/kind-test.sh tellagen-proxy kind
