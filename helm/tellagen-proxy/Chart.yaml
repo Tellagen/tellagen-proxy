@@ -1,0 +1,10 @@
+apiVersion: v2
+name: tellagen-proxy
+description: Connects a Grafana that Tellagen cannot reach. It polls Tellagen over outbound HTTPS and runs read-only queries.
+type: application
+# The release workflow sets version and appVersion from the v* tag when it
+# packages the chart. The value here is a placeholder.
+version: 0.0.0
+appVersion: 0.0.0
+kubeVersion: ">=1.25.0-0"
+home: https://tellagen.com/help

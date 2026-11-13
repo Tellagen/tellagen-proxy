@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "tellagen-proxy.fullname" . }}-doctor
+  labels:
+    {{- include "tellagen-proxy.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "tellagen-proxy.serviceAccountName" . }}
+  automountServiceAccountToken: false
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    {{- include "tellagen-proxy.podSecurityContext" . | nindent 4 }}
+  containers:
+    - name: doctor
+      image: {{ include "tellagen-proxy.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      args: ["doctor"]
+      securityContext:
+        {{- include "tellagen-proxy.containerSecurityContext" . | nindent 8 }}
+      env:
+        {{- include "tellagen-proxy.env" . | nindent 8 }}
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+      {{- with (include "tellagen-proxy.volumeMounts" . | trim) }}
+      volumeMounts:
+        {{- . | nindent 8 }}
+      {{- end }}
+  {{- with (include "tellagen-proxy.volumes" . | trim) }}
+  volumes:
+    {{- . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}

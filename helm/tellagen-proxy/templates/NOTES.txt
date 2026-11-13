@@ -1,0 +1,17 @@
+tellagen-proxy {{ .Chart.AppVersion }} is installed as {{ include "tellagen-proxy.fullname" . }}.
+
+Check the way to Tellagen and to Grafana:
+
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+  kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "tellagen-proxy.fullname" . }} -- /tellagen-proxy doctor
+
+Tellagen shows the proxy as connected within a minute.
+
+A diagnosis reads log patterns by default. Loki answers them only with its pattern
+ingester on (pattern_ingester.enabled: true), and it keeps a pattern for 3 hours. Without
+them a diagnosis reads log counts and reports the missing patterns as a gap.
+
+A run has two limits. query.maxPerRun in the policy file limits the queries that read
+data. List and search calls (metric names, label values, datasources, dashboards, panel
+queries and alert rules) have their own limit, query.maxListPerRun, which is 60. The file
+can only lower it. To limit the load on Grafana, set both.

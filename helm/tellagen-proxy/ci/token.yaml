@@ -1,0 +1,9 @@
+# The quick start: both tokens in the values, as --set-file does.
+grafana:
+  url: https://grafana.example.com
+  token: glsa_test_grafana_token
+tellagen:
+  token: tlg_proxy_test.token
+  labels:
+    env: prod
+    cluster: prod-eu-1

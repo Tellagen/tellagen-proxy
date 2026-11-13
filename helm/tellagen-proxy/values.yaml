@@ -1,0 +1,142 @@
+# Settings for the tellagen-proxy chart. Every secret is mounted as a file in a
+# whole directory, so a rotated Secret reaches the proxy without a restart.
+
+image:
+  repository: ghcr.io/tellagen/tellagen-proxy
+  # The chart appVersion when empty.
+  tag: ""
+  # The release workflow writes the digest of the signed image here. A digest wins
+  # over the tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Each replica opens its own connection. Tellagen sends a job to one of them.
+replicaCount: 2
+
+tellagen:
+  # The proxy token. Pass it with --set-file. The chart then makes a Secret.
+  token: ""
+  # Only for a test setup. The default is https://connect.tellagen.com.
+  url: ""
+  # Shown in Tellagen next to the proxy, for example { env: prod, cluster: prod-eu-1 }.
+  labels: {}
+
+grafana:
+  # The address the proxy uses to reach Grafana. Required.
+  url: ""
+  # The address people open, for links. Use it when url is an in-cluster address.
+  publicUrl: ""
+  orgId: ""
+  # A Viewer service account token. Pass it with --set-file. The chart then makes a Secret.
+  token: ""
+  # A local allowlist. Tellagen can only make it smaller.
+  allowedDatasourceUids: []
+
+# A Secret you manage (kubectl, External Secrets, Sealed Secrets, SOPS). Do not
+# set tellagen.token or grafana.token together with it.
+existingSecret: ""
+# The key of each token in the Secret. They become file names in the mounted directory.
+secretKeys:
+  tellagenToken: tellagen-proxy-token
+  grafanaToken: grafana-service-account-token
+
+# Files that something else writes: Vault Agent, Vault CSI, AWS or GCP CSI
+# providers, consul-template. The chart creates no Secret for a token set here.
+# Give the absolute path inside the container.
+secretFiles:
+  tellagenToken: ""
+  grafanaToken: ""
+
+proxy:
+  # The corporate proxy for traffic to Tellagen. Grafana traffic goes direct.
+  httpsProxy: ""
+  noProxy: ""
+  # Only when Grafana can be reached through a proxy and not directly.
+  grafanaHttpsProxy: ""
+
+# A company CA bundle in a ConfigMap, added to the system roots for Tellagen and
+# for Grafana. It works with cert-manager trust-manager Bundles. Restart the pods
+# after the bundle changes.
+caBundle:
+  configMap: ""
+  key: ca.crt
+
+# The local policy file (TELLAGEN_POLICY_FILE). Leave it empty for no file. The
+# keys are the ones in the Tellagen help article on the policy file.
+# query.maxPerRun limits the queries that read data in one run (40 by default).
+# List and search calls have their own limit, query.maxListPerRun, which is 60
+# and can only be lowered.
+# Redaction stays on unless you set redaction.allowOff to true here. Without it, a
+# Tellagen admin cannot turn redaction off for this proxy.
+policy: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # Mounts a projected token with the audience "vault" for the Vault Agent
+  # injector. Without it the pod gets no service account token at all. The
+  # account has no RBAC either way.
+  vaultAuth: false
+
+# Leaves the user id to the OpenShift security context constraint.
+openshift: false
+
+podAnnotations: {}
+podLabels: {}
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+# Empty means a soft rule that spreads the replicas over nodes.
+affinity: {}
+topologySpreadConstraints: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Extra environment variables, volumes and mounts. Do not put a secret in env.
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+metrics:
+  # Makes a Service and a ServiceMonitor. Needs the Prometheus Operator CRDs.
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+networkPolicy:
+  enabled: false
+  dns:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: kube-system
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+  # Where the proxy may send traffic to Tellagen: the published range of
+  # connect.tellagen.com, or your corporate proxy. Empty means any address on
+  # these ports.
+  tellagen:
+    cidrs: []
+    ports: [443]
+  # Peers that may receive traffic from the proxy: raw NetworkPolicy "to" entries
+  # for Grafana, for example a namespaceSelector and a podSelector.
+  grafana:
+    to: []
+    ports: [3000]
+  # Peers that may reach port 8080 (probes from the node always work). Raw
+  # NetworkPolicy "from" entries, for example your Prometheus namespace.
+  ingress:
+    from: []

@@ -1,0 +1,43 @@
+# A corporate proxy, a company CA, a policy file, a NetworkPolicy and OpenShift.
+grafana:
+  url: http://grafana.monitoring.svc:3000
+  publicUrl: https://grafana.example.com
+  token: glsa_test_grafana_token
+tellagen:
+  token: tlg_proxy_test.token
+proxy:
+  httpsProxy: http://proxy.corp.example:3128
+  noProxy: .corp.example,10.0.0.0/8,.svc,.cluster.local
+caBundle:
+  configMap: corp-ca
+  key: ca.crt
+policy:
+  datasourceUIDs: [prom-prod, loki-prod]
+  query:
+    maxTimeout: 30s
+    maxPerRun: 20
+    maxListPerRun: 30
+  logs:
+    maxLines: 10
+openshift: true
+networkPolicy:
+  enabled: true
+  tellagen:
+    cidrs: [192.0.2.0/24]
+    ports: [3128]
+  grafana:
+    to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+    ports: [3000]
+  ingress:
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
