@@ -144,8 +144,10 @@ test("the image job builds both platforms without provenance, and checks size, u
   assert.match(text, /node scripts\/image-check\.mjs --max-bytes "\$MAX_IMAGE_BYTES"/);
   assert.equal(ci.env.MAX_IMAGE_BYTES, String(30 * 1024 * 1024));
   assert.ok(stepUsing("image", "docker/setup-buildx-action"));
-  assert.match(text, /test "\$\(docker run --rm "\$id" version\)" = "tellagen-proxy 0\.0\.0-ci"/);
-  assert.match(text, /--read-only --cap-drop ALL --security-opt no-new-privileges/);
+  assert.match(text, /docker buildx build --platform linux\/amd64 .*--load --tag tellagen-proxy:ci/s);
+  assert.match(text, /test "\$\(docker run --rm tellagen-proxy:ci version\)" = "tellagen-proxy 0\.0\.0-ci"/);
+  assert.doesNotMatch(text, /docker load/);
+  assert.match(text, /--read-only --cap-drop ALL --security-opt no-new-privileges tellagen-proxy:ci doctor/);
   assert.match(text, /TELLAGEN_PROXY_TOKEN or TELLAGEN_PROXY_TOKEN_FILE is required/);
 });
 
