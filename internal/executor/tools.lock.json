@@ -1,0 +1,15 @@
+{
+  "version": "v2.2.0",
+  "tools": {
+    "alerting_rules_read": "sha256:b99e572f149aa99b64085c8a20bb144d392ddb312cd59f10ea802ac2c2dff020",
+    "get_dashboard_panel_queries": "sha256:ab512ee224999c613857507f4566f0a7dc8499b71a6902a3db8179b1f3af49ea",
+    "list_datasources": "sha256:9263406dbe621a6d012e120556406c83905689f1b7cedeb37899d04a36c58880",
+    "list_loki_label_values": "sha256:e6827ae54f2c36940ef4c66c34d028832863adeab1e46cd325e318e85d41e83a",
+    "list_prometheus_label_values": "sha256:b267e2c52741ad2cfab68c146ea67c2d78ce2948fa1d008e600dea96b2724992",
+    "list_prometheus_metric_names": "sha256:047017e0e0fc7f4a30eb875b407f9c4d985f3dfbab1a518de15546c3b9135482",
+    "query_loki_logs": "sha256:860dad6437ca77960856252032694675276d8a22a382808eb123776b83e3487d",
+    "query_loki_patterns": "sha256:c53714168ec98bbeb710f8dd4f48b1100fbb054540662e72ee9fba14d23be430",
+    "query_prometheus": "sha256:2b20d2d20587c30f0b9f201db929832b02fa553ad83ac315ae6eac9309379a20",
+    "search_dashboards": "sha256:c16242f9d0c6f51285885fa389e86dda62fc0dedc9e2ab8add68e280bbc61fa2"
+  }
+}
