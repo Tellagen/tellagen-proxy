@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for coding agents that work in this repository. Read [DESIGN.md](DESIGN.md) before you change how a command runs, and [README.md](README.md) for the settings.
+Guidance for coding agents that work in this repository. Read [DESIGN.md](DESIGN.md) before you change how a command runs, and [docs/configuration.md](docs/configuration.md) for the variables and policy keys.
 
 ## What this repository is
 

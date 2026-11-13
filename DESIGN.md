@@ -93,7 +93,7 @@ Errors from Tellagen use the codes in `protocol.ErrorReply` (`proxy_token_invali
 
 ## Configuration and secrets
 
-The README lists every variable. These rules shape the code in `internal/settings`:
+[docs/configuration.md](docs/configuration.md) lists every variable. These rules shape the code in `internal/settings`:
 
 - **Secrets come from the environment or from a file, never both.** A token in a file is read again every minute, so a rotated token needs no restart. The proxy token is also read again after a `401` from Tellagen. A Vault sidecar may write the file late, so the proxy waits up to two minutes for it at start.
 - **A token never leaves its host.** The proxy token goes only to `TELLAGEN_URL`. The Grafana token goes only to `GRAFANA_URL`. The Grafana address itself is never sent to Tellagen: the hello carries only `GRAFANA_PUBLIC_URL`.
