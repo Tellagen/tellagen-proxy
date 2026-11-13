@@ -108,11 +108,11 @@ jobs:
 
       - name: Run the image
         run: |
-          id="$(docker load --input "$RUNNER_TEMP/image/amd64.tar" | sed -n -e 's/^Loaded image ID: //p' -e 's/^Loaded image: //p')"
-          test -n "$id"
-          test "$(docker run --rm "$id" version)" = "tellagen-proxy 0.0.0-ci"
+          docker buildx build --platform linux/amd64 --build-arg VERSION=0.0.0-ci \
+            --provenance=false --sbom=false --load --tag tellagen-proxy:ci .
+          test "$(docker run --rm tellagen-proxy:ci version)" = "tellagen-proxy 0.0.0-ci"
           status=0
-          output="$(docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges "$id" doctor 2>&1)" || status=$?
+          output="$(docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges tellagen-proxy:ci doctor 2>&1)" || status=$?
           test "$status" -eq 1
           grep -q "TELLAGEN_PROXY_TOKEN or TELLAGEN_PROXY_TOKEN_FILE is required" <<<"$output"
 
