@@ -109,17 +109,19 @@ test("the notes are read before anything is logged in, built or pushed", () => {
   assert.match(steps("release")[notes].run, /RELEASE-NOTES\.md/);
 });
 
-test("secrets reach only the release job, from the release environment, and the other jobs never see one", () => {
+test("the release job holds no secret but the token of the run, and nothing mentions Docker Hub", () => {
   for (const job of ["verify", "dry-run", "github-release", "classic-repository"]) {
     assert.doesNotMatch(JSON.stringify(workflow.jobs[job]), /secrets\./, job);
   }
-  assert.equal(workflow.jobs.release.environment, "release", "a workflow on a branch cannot read the Docker Hub secrets");
+  assert.equal(workflow.jobs.release.environment, "release", "the release environment limits the job to v* tags");
   const names = [...JSON.stringify(workflow.jobs.release).matchAll(/secrets\.(\w+)/g)].map((match) => match[1]);
-  assert.deepEqual([...new Set(names)].sort(), ["DOCKERHUB_TOKEN", "DOCKERHUB_USERNAME", "GITHUB_TOKEN"]);
+  assert.deepEqual([...new Set(names)], ["GITHUB_TOKEN"]);
+  for (const path of [".github/workflows/ci.yml", ".github/workflows/release.yml", "README.md", "DESIGN.md", "CLAUDE.md", "CHANGELOG.md", "Dockerfile"]) {
+    assert.doesNotMatch(read(path), /dockerhub|docker\.io|docker hub/i, path);
+  }
   assert.equal(workflow.jobs.verify.environment, undefined);
   assert.equal(workflow.jobs["dry-run"].environment, undefined);
   assert.deepEqual(workflow.jobs["classic-repository"].environment, { name: "github-pages", url: "https://charts.tellagen.com" });
-  assert.match(text("release"), /The release environment has no secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN/);
 });
 
 test("the dry run builds and packages and publishes nothing", () => {
@@ -142,16 +144,17 @@ test("the image is built for both platforms with an SBOM and max provenance, and
   assert.equal(build.with.context, ".");
   assert.equal(build.with.file, undefined, "the Dockerfile is in the root");
   assert.match(build.with["build-args"], /VERSION=\$\{\{ steps\.version\.outputs\.version \}\}/);
-  assert.match(build.with.tags, /^\$\{\{ env\.IMAGE_GHCR \}\}:\$\{\{ steps\.version\.outputs\.version \}\}$/);
+  assert.equal(build.with.tags, "${{ steps.refs.outputs.refs }}", "the moving tags are pushed with the image");
   assert.match(text("release"), /SBOM Provenance/);
   assert.match(text("release"), /jq -e 'type == "object" and length > 0'/);
 });
 
-test("the image is signed with cosign keyless and verified in both registries by the identity of this workflow", () => {
+test("the image is signed with cosign keyless and verified by the identity of this workflow", () => {
   const release = text("release");
   assert.match(release, /sigstore\/cosign-installer@[0-9a-f]{40}/);
-  assert.match(release, /cosign sign --yes "\$\{IMAGE_GHCR\}@\$\{DIGEST\}" "\$\{IMAGE_DOCKERHUB\}@\$\{DIGEST\}"/);
-  assert.match(release, /for image in "\$IMAGE_GHCR" "\$IMAGE_DOCKERHUB"/);
+  assert.match(release, /cosign sign --yes "\$\{IMAGE_GHCR\}@\$\{DIGEST\}"\n/);
+  assert.match(release, /\[\[ "\$DIGEST" =~ \^sha256:\[0-9a-f\]\{64\}\$ \]\]/);
+  assert.match(release, /"\$\{IMAGE_GHCR\}@\$\{DIGEST\}" >\/dev\/null/);
   assert.match(release, /cosign verify/);
   assert.match(release, /--certificate-identity "\$IDENTITY"/);
   assert.match(release, /--certificate-oidc-issuer https:\/\/token\.actions\.githubusercontent\.com/);
@@ -160,23 +163,35 @@ test("the image is signed with cosign keyless and verified in both registries by
   assert.ok(indexOf("release", (step) => /cosign sign --yes/.test(step.run ?? "")) < indexOf("release", (step) => /cosign verify/.test(step.run ?? "")));
 });
 
-test("the registries are ghcr.io/tellagen and Docker Hub, the mirror copies the digest, and nothing is tagged latest", () => {
+test("the registry is ghcr.io/tellagen only, with one login, and nothing is tagged latest", () => {
   assert.match(source, /IMAGE_GHCR: ghcr\.io\/tellagen\/tellagen-proxy/);
-  assert.match(source, /IMAGE_DOCKERHUB: docker\.io\/tellagen\/tellagen-proxy/);
   assert.match(source, /CHART_GHCR: ghcr\.io\/tellagen\/charts/);
   assert.doesNotMatch(source, /:latest\b|tag.*latest/);
-  const mirror = steps("release").find((step) => step.name?.startsWith("Mirror the image"));
-  assert.match(mirror.run, /docker buildx imagetools create/);
-  assert.match(mirror.run, /"\$\{IMAGE_GHCR\}@\$\{DIGEST\}"/);
-  assert.match(mirror.run, /\[\[ "\$DIGEST" =~ \^sha256:\[0-9a-f\]\{64\}\$ \]\]/);
-  assert.equal(mirror.env.TAGS, "${{ steps.version.outputs.tags }}");
-  assert.ok(stepsWithLogin().length === 2, "one login for ghcr.io and one for Docker Hub");
-  assert.equal(stepsWithLogin()[0].with.registry, "ghcr.io");
+  assert.equal(steps("release").filter((step) => step.name?.startsWith("Mirror")).length, 0, "no second registry to mirror to");
+  const logins = steps("release").filter((step) => step.uses?.startsWith("docker/login-action"));
+  assert.equal(logins.length, 1, "one login, for ghcr.io");
+  assert.equal(logins[0].with.registry, "ghcr.io");
+  assert.equal(logins[0].with.password, "${{ secrets.GITHUB_TOKEN }}");
 });
 
-function stepsWithLogin() {
-  return steps("release").filter((step) => step.uses?.startsWith("docker/login-action"));
-}
+test("the image tags: a stable release also gets the major and minor tags, a pre-release never does", () => {
+  const refs = steps("release").find((step) => step.id === "refs");
+  assert.equal(refs.env.TAGS, "${{ steps.version.outputs.tags }}");
+  assert.ok(indexOf("release", (step) => step.id === "refs") < indexOf("release", (step) => step.id === "build"));
+  const run = (tags) => {
+    const dir = mkdtempSync(join(tmpdir(), "release-refs-"));
+    try {
+      const outputFile = join(dir, "github-output");
+      const output = spawnSync("bash", ["-c", `export TAGS=${tags} IMAGE_GHCR=ghcr.io/example/image GITHUB_OUTPUT=${outputFile}; touch "$GITHUB_OUTPUT"; ${refs.run}`], { encoding: "utf8" });
+      assert.equal(output.status, 0, output.stderr);
+      return readFileSync(outputFile, "utf8");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  assert.equal(run("1.2.3,1,1.2"), "refs=ghcr.io/example/image:1.2.3,ghcr.io/example/image:1,ghcr.io/example/image:1.2\n");
+  assert.equal(run("1.2.3-rc.1"), "refs=ghcr.io/example/image:1.2.3-rc.1\n");
+});
 
 test("the chart gets the image digest and the release version, is pushed as an OCI chart, signed, and verified", () => {
   const release = text("release");

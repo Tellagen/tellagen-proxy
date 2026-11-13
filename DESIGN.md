@@ -132,14 +132,14 @@ Errors from Tellagen use the codes in `protocol.ErrorReply` (`proxy_token_invali
 
 A release is a `v*` tag on a commit that is on `master`. The release workflow (`.github/workflows/release.yml`) first runs the CI workflow, then:
 
-1. Builds the image for `linux/amd64` and `linux/arm64`, with an SBOM and build provenance, and pushes it to `ghcr.io/tellagen/tellagen-proxy`.
-2. Copies it to `docker.io/tellagen/tellagen-proxy`. A stable release also gets the moving tags for its major and its major.minor version. A pre-release (`-rc`, `-beta`) never does.
-3. Signs both images by digest with cosign keyless signing and verifies the signature against the identity of this workflow.
+1. Reads the release notes from `CHANGELOG.md`, so a missing section stops the release before anything is pushed.
+2. Builds the image for `linux/amd64` and `linux/arm64`, with an SBOM and build provenance, and pushes it to `ghcr.io/tellagen/tellagen-proxy`. A stable release is pushed with the moving tags for its major and its major.minor version too. A pre-release (`-rc`, `-beta`) never gets them.
+3. Signs the image by digest with cosign keyless signing and verifies the signature against the identity of this workflow.
 4. Packages the chart with the version of the tag and the digest of the signed image, pushes it to `oci://ghcr.io/tellagen/charts`, and signs it.
 5. Adds the chart to the classic repository at `https://charts.tellagen.com`, which is a GitHub Pages site. The job downloads the versions in the live index first, so the new index keeps them. A missing index means the first release, and any other answer stops the job.
 6. Creates a GitHub Release with the notes from `CHANGELOG.md`.
 
-The Docker Hub credentials live in the `release` environment, so, with the environment limited to `v*` tags, only a run of the release workflow can read them. The chart in the repository keeps the placeholder version `0.0.0`. Tellagen shows the newest released version in its setup commands. It keeps that value on its own side, and for now it is updated by hand after a release.
+The release job runs in the `release` environment, which allows only `v*` tags, and it holds no secret of its own: it pushes to ghcr.io with the `GITHUB_TOKEN` of the run. Images and charts are published only to GitHub's registry. The chart in the repository keeps the placeholder version `0.0.0`. Tellagen shows the newest released version in its setup commands. It keeps that value on its own side, and for now it is updated by hand after a release.
 
 ## Non-goals
 

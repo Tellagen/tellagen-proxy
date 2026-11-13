@@ -35,7 +35,7 @@ docker run -d --name tellagen-proxy --restart unless-stopped --read-only \
   ghcr.io/tellagen/tellagen-proxy:<version>
 ```
 
-The image is also on Docker Hub as `tellagen/tellagen-proxy`. Inside the container, `localhost` is the container. If Grafana runs on the Docker host, use `host.docker.internal` or the address of the host.
+Inside the container, `localhost` is the container. If Grafana runs on the Docker host, use `host.docker.internal` or the address of the host.
 
 ### Helm
 
@@ -96,7 +96,7 @@ cosign verify ghcr.io/tellagen/tellagen-proxy:<version> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The same command works for `docker.io/tellagen/tellagen-proxy:<version>` and for the chart at `ghcr.io/tellagen/charts/tellagen-proxy:<version>`.
+The same command checks the chart at `ghcr.io/tellagen/charts/tellagen-proxy:<version>`.
 
 ## Build from source
 

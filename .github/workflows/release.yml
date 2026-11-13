@@ -1,11 +1,10 @@
-# A v* tag builds the image for linux/amd64 and linux/arm64, pushes it to ghcr.io
-# and Docker Hub, signs it with cosign (keyless), and publishes the Helm chart as
-# an OCI chart and as a classic repository at charts.tellagen.com. Running the
-# workflow by hand is a dry run: it builds and packages and publishes nothing.
+# A v* tag builds the image for linux/amd64 and linux/arm64, pushes it to ghcr.io,
+# signs it with cosign (keyless), and publishes the Helm chart as an OCI chart and
+# as a classic repository at charts.tellagen.com. Running the workflow by hand is
+# a dry run: it builds and packages and publishes nothing.
 #
-# Every action is pinned to a commit, because the release job holds registry
-# credentials. Those credentials live in the `release` environment, so a workflow
-# on a branch cannot read them.
+# Every action is pinned to a commit, because the release job can write packages.
+# The job runs in the `release` environment, which allows only v* tags.
 name: Release
 
 on:
@@ -22,7 +21,6 @@ concurrency:
 
 env:
   IMAGE_GHCR: ghcr.io/tellagen/tellagen-proxy
-  IMAGE_DOCKERHUB: docker.io/tellagen/tellagen-proxy
   CHART_GHCR: ghcr.io/tellagen/charts
 
 jobs:
@@ -115,12 +113,17 @@ jobs:
           mkdir -p "$RUNNER_TEMP/release"
           node scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release/RELEASE-NOTES.md"
 
-      - name: Check the registry credentials
+      - name: List the image tags
+        id: refs
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAGS: ${{ steps.version.outputs.tags }}
         run: |
-          test -n "$DOCKERHUB_USERNAME" && test -n "$DOCKERHUB_TOKEN" || { echo "::error::The release environment has no secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN."; exit 1; }
+          set -euo pipefail
+          refs=""
+          for tag in ${TAGS//,/ }; do
+            refs+="${IMAGE_GHCR}:${tag},"
+          done
+          printf 'refs=%s\n' "${refs%,}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
@@ -130,11 +133,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Build and push the image to ghcr.io
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -143,46 +141,32 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-          tags: ${{ env.IMAGE_GHCR }}:${{ steps.version.outputs.version }}
+          tags: ${{ steps.refs.outputs.refs }}
           provenance: mode=max
           sbom: true
           push: true
-
-      - name: Mirror the image to Docker Hub and add the moving tags
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.version.outputs.tags }}
-        run: |
-          set -euo pipefail
-          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          args=()
-          for tag in ${TAGS//,/ }; do
-            args+=(--tag "${IMAGE_DOCKERHUB}:${tag}")
-            [[ "$tag" == "${TAGS%%,*}" ]] || args+=(--tag "${IMAGE_GHCR}:${tag}")
-          done
-          docker buildx imagetools create "${args[@]}" "${IMAGE_GHCR}@${DIGEST}"
 
       - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
         with:
           cosign-release: v2.6.5
 
-      - name: Sign the image in both registries
+      - name: Sign the image
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "${IMAGE_GHCR}@${DIGEST}" "${IMAGE_DOCKERHUB}@${DIGEST}"
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes "${IMAGE_GHCR}@${DIGEST}"
 
-      - name: Verify the signatures
+      - name: Verify the signature
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
           IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
         run: |
-          set -euo pipefail
-          for image in "$IMAGE_GHCR" "$IMAGE_DOCKERHUB"; do
-            cosign verify \
-              --certificate-identity "$IDENTITY" \
-              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-              "${image}@${DIGEST}" >/dev/null
-          done
+          cosign verify \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${IMAGE_GHCR}@${DIGEST}" >/dev/null
 
       - name: Check the SBOM and the build provenance
         env:
