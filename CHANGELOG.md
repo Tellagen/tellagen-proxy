@@ -4,6 +4,8 @@ All notable changes to this project are in this file. The format follows [Keep a
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-15
+
 ### Added
 
 - The proxy lives in its own public repository: the Go code, the `protocol` and `redact` packages, the Helm chart, and the release workflow.
