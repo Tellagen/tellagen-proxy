@@ -1,0 +1,10 @@
+apiVersion: v2
+name: diagnosis-reader
+description: A read-only Kubernetes role for AI diagnosis. It grants get, list and watch on workload resources, never secrets, and binds the role to a group or a service account.
+type: application
+# The release workflow sets version and appVersion from the v* tag when it
+# packages the chart. The value here is a placeholder.
+version: 0.0.0
+appVersion: 0.0.0
+kubeVersion: ">=1.25.0-0"
+home: https://tellagen.com/help

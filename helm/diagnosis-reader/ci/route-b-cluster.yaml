@@ -1,0 +1,4 @@
+# Route B, the whole cluster: a service account, and the groups may mint its tokens.
+bind:
+  groups: [tellagen-diagnosis]
+  serviceAccount: true

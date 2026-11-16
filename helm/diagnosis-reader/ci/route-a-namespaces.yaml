@@ -1,0 +1,8 @@
+# Route A in two namespaces, with log lines and metrics off.
+bind:
+  groups: [tellagen-diagnosis]
+scope: namespaces
+namespaces: [reader-test-a, reader-test-b]
+read:
+  podLogs: false
+  metrics: false

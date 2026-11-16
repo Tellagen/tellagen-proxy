@@ -1,0 +1,34 @@
+# Settings for the diagnosis-reader chart. The chart installs one read-only role
+# and binds it. It runs no pod, and nothing here can add a verb or a resource.
+
+bind:
+  # Route A (recommended): the groups of a separate read-only identity, as your
+  # OIDC provider or cloud access entry sends them. Leave the list empty to use
+  # only the service account.
+  groups:
+    - tellagen-diagnosis
+  # Route B: also bind a service account. The groups above then get the right to
+  # create tokens for it (serviceaccounts/token), and nothing else.
+  serviceAccount: false
+
+# cluster: one ClusterRole and ClusterRoleBinding.
+# namespaces: a Role and a RoleBinding in each namespace listed below. Nodes,
+# namespaces and persistent volumes belong to the cluster, so they are not read.
+scope: cluster
+namespaces: []
+
+read:
+  # false removes pods/log, which keeps log lines away from the model provider.
+  podLogs: true
+  # metrics.k8s.io for pods, and for nodes with scope cluster.
+  metrics: true
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Only the Helm test uses this image. It needs kubectl and a shell.
+test:
+  image:
+    repository: alpine/kubectl
+    tag: 1.34.1
+    pullPolicy: IfNotPresent

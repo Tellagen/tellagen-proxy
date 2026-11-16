@@ -4,6 +4,10 @@ All notable changes to this project are in this file. The format follows [Keep a
 
 ## [Unreleased]
 
+### Added
+
+- The `diagnosis-reader` Helm chart at `oci://ghcr.io/tellagen/charts/diagnosis-reader`. It installs a read-only Kubernetes role (`get`, `list` and `watch`, never secrets, `pods/exec` or other writes) and binds it to groups, or to a service account whose tokens the groups can create. It has a Helm test and a kind test in CI.
+
 ## [1.0.0] - 2026-11-15
 
 ### Added

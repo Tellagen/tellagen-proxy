@@ -1,0 +1,4 @@
+# Route B with no group: only an administrator can mint a token.
+bind:
+  groups: []
+  serviceAccount: true

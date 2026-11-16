@@ -1,0 +1,6 @@
+# Route B in two namespaces.
+bind:
+  groups: [tellagen-diagnosis]
+  serviceAccount: true
+scope: namespaces
+namespaces: [reader-test-a, reader-test-b]

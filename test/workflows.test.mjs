@@ -167,3 +167,24 @@ test("the kind job runs on a pull request that changes the chart, on a tag and b
   assert.match(script, /helm uninstall tellagen-proxy/);
   assert.match(script, /delete pod tellagen-proxy-doctor/);
 });
+
+test("the chart job lints the diagnosis-reader chart in every route and scope", () => {
+  const text = textOf(steps("chart"));
+  assert.match(text, /for values in helm\/diagnosis-reader\/ci\/\*\.yaml/);
+  assert.match(text, /helm lint helm\/diagnosis-reader --strict --values "\$values"/);
+});
+
+test("the diagnosis-reader kind job needs no image, runs under the same conditions as the proxy job, and runs the script", () => {
+  const job = ci.jobs["kind-reader"];
+  assert.equal(job.needs, "changes");
+  assert.equal(job.if, ci.jobs.kind.if);
+  assert.equal(stepUsing("kind-reader", "helm/kind-action").with.version, "v0.33.0");
+  const text = textOf(steps("kind-reader"));
+  assert.match(text, /helm\/diagnosis-reader\/ci\/kind-test\.sh/);
+  assert.doesNotMatch(text, /docker (buildx )?build|kind load/);
+  const script = read("helm/diagnosis-reader/ci/kind-test.sh");
+  assert.match(script, /helm test "\$release"/);
+  assert.match(script, /helm uninstall "\$release"/);
+  assert.match(script, /get secrets/);
+  assert.match(script, /create pods --subresource=exec/);
+});

@@ -65,6 +65,10 @@ helm install tellagen-proxy oci://ghcr.io/tellagen/charts/tellagen-proxy \
 
 The chart also supports token files from Vault Agent or a CSI driver (`secretFiles.*`). It supports a corporate proxy, a company CA bundle, a policy file, a NetworkPolicy and OpenShift. All values are in [`values.yaml`](helm/tellagen-proxy/values.yaml).
 
+### Read-only access to Kubernetes
+
+The separate `diagnosis-reader` chart installs a read-only role for AI diagnosis and binds it to a group or a service account. It runs no pod. See [its README](helm/diagnosis-reader/README.md).
+
 ### Check the connection
 
 ```sh

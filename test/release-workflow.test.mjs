@@ -208,6 +208,20 @@ test("the chart gets the image digest and the release version, is pushed as an O
   assert.ok(indexOf("release", (step) => /package-chart\.sh/.test(step.run ?? "")) > indexOf("release", (step) => /cosign verify/.test(step.run ?? "")), "the chart is packaged after the image is signed and verified");
 });
 
+test("the diagnosis-reader chart is packaged with the release version, pushed to the same registry, signed and verified", () => {
+  const release = text("release");
+  assert.match(release, /scripts\/package-reader-chart\.sh "\$VERSION" "\$RUNNER_TEMP\/release"/);
+  assert.match(release, /helm push "\$RUNNER_TEMP\/release\/diagnosis-reader-\$\{VERSION\}\.tgz" "oci:\/\/\$\{CHART_GHCR\}"/);
+  assert.match(release, /cosign sign --yes "\$\{CHART_GHCR\}\/diagnosis-reader@\$\{chart_digest\}"/);
+  assert.match(release, /cosign verify[^]*"\$\{CHART_GHCR\}\/diagnosis-reader@\$\{chart_digest\}"/);
+  const script = read("scripts/package-reader-chart.sh");
+  assert.match(script, /helm package .*--version "\$version" --app-version "\$version"/);
+  assert.match(script, /helm lint .* --strict/);
+  assert.match(text("dry-run"), /scripts\/package-reader-chart\.sh 0\.0\.0-dry-run/);
+  assert.match(text("classic-repository"), /cp "\$RUNNER_TEMP"\/new\/diagnosis-reader-\*\.tgz "\$site\/"/);
+  assert.ok(indexOf("release", (step) => /package-reader-chart\.sh/.test(step.run ?? "")) > indexOf("release", (step) => /cosign verify/.test(step.run ?? "")));
+});
+
 test("the artifact keeps the chart, the SBOM, the provenance and the notes for 90 days", () => {
   const upload = stepUsing("release", "actions/upload-artifact");
   assert.equal(upload.with["if-no-files-found"], "error");

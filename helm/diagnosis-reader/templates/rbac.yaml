@@ -1,0 +1,54 @@
+{{- include "diagnosis-reader.validate" . -}}
+{{- $name := include "diagnosis-reader.fullname" . -}}
+{{- if eq .Values.scope "cluster" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "diagnosis-reader.labels" . | nindent 4 }}
+rules:
+  {{- include "diagnosis-reader.rules" (dict "root" . "cluster" true) | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "diagnosis-reader.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}
+subjects:
+  {{- include "diagnosis-reader.subjects" . | trim | nindent 2 }}
+{{- else }}
+{{- range $index, $namespace := .Values.namespaces }}
+{{- if $index }}
+---
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "diagnosis-reader.labels" $ | nindent 4 }}
+rules:
+  {{- include "diagnosis-reader.rules" (dict "root" $ "cluster" false) | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "diagnosis-reader.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  {{- include "diagnosis-reader.subjects" $ | trim | nindent 2 }}
+{{- end }}
+{{- end }}

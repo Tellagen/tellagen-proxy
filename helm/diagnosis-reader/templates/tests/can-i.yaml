@@ -1,0 +1,144 @@
+{{- include "diagnosis-reader.validate" . -}}
+{{- $name := include "diagnosis-reader.fullname" . -}}
+{{- $testName := printf "%s-test" ($name | trunc 58 | trimSuffix "-") -}}
+{{- $subjects := list -}}
+{{- range .Values.bind.groups }}{{- $subjects = append $subjects (printf "group:%s" .) }}{{- end -}}
+{{- if .Values.bind.serviceAccount }}{{- $subjects = append $subjects (printf "serviceaccount:%s:%s" .Release.Namespace (include "diagnosis-reader.serviceAccountName" .)) }}{{- end -}}
+{{- $scopes := list "-A" -}}
+{{- if eq .Values.scope "namespaces" }}{{- $scopes = list -}}{{- range .Values.namespaces }}{{- $scopes = append $scopes (printf "-n=%s" .) }}{{- end }}{{- end -}}
+# The test pod only asks the API server whether the bound subjects may act. It
+# impersonates them, so it holds the right to impersonate these subjects and no
+# other right. Helm removes all of it after the test.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $testName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "diagnosis-reader.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $testName }}
+  labels:
+    {{- include "diagnosis-reader.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: [users]
+    resourceNames: ["diagnosis-reader-test"]
+    verbs: [impersonate]
+  {{- if .Values.bind.groups }}
+  - apiGroups: [""]
+    resources: [groups]
+    resourceNames:
+      {{- range .Values.bind.groups }}
+      - {{ . | quote }}
+      {{- end }}
+    verbs: [impersonate]
+  {{- end }}
+  {{- if .Values.bind.serviceAccount }}
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    resourceNames: [{{ include "diagnosis-reader.serviceAccountName" . | quote }}]
+    verbs: [impersonate]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $testName }}
+  labels:
+    {{- include "diagnosis-reader.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $testName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $testName }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $testName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "diagnosis-reader.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ $testName }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: can-i
+      image: {{ printf "%s:%s" .Values.test.image.repository .Values.test.image.tag | quote }}
+      imagePullPolicy: {{ .Values.test.image.pullPolicy }}
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          failed=0
+          # check <expected> <subject> <scope> <can-i arguments>
+          check() {
+            expected=$1 subject=$2 scope=$3
+            shift 3
+            case $subject in
+              group:*) as="--as=diagnosis-reader-test --as-group=${subject#group:}" ;;
+              serviceaccount:*) as="--as=system:${subject}" ;;
+            esac
+            # shellcheck disable=SC2086
+            answer=$(kubectl auth can-i "$@" $scope $as 2>/dev/null || true)
+            if [ "$answer" = "$expected" ]; then
+              echo "ok    $subject $scope $* -> $answer"
+            else
+              echo "FAIL  $subject $scope $* -> ${answer:-no answer}, expected $expected"
+              failed=1
+            fi
+          }
+          for subject in {{ range $subjects }}{{ . | quote }} {{ end }}; do
+            for scope in {{ range $scopes }}{{ . | quote }} {{ end }}; do
+              check yes "$subject" "$scope" list pods
+              check no "$subject" "$scope" delete pods
+              check no "$subject" "$scope" get secrets
+              check no "$subject" "$scope" create pods --subresource=exec
+              check {{ if .Values.read.podLogs }}yes{{ else }}no{{ end }} "$subject" "$scope" get pods --subresource=log
+            done
+          done
+          exit $failed
+      env:
+        - name: HOME
+          value: /tmp/home
+      volumeMounts:
+        - name: home
+          mountPath: /tmp/home
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+  volumes:
+    - name: home
+      emptyDir: {}

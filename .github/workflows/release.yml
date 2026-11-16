@@ -57,6 +57,9 @@ jobs:
       - name: Package the chart
         run: scripts/package-chart.sh 0.0.0-dry-run "sha256:$(printf '0%.0s' {1..64})" "$RUNNER_TEMP/chart"
 
+      - name: Package the diagnosis-reader chart
+        run: scripts/package-reader-chart.sh 0.0.0-dry-run "$RUNNER_TEMP/chart"
+
   release:
     name: Sign and publish
     needs: verify
@@ -204,6 +207,23 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "${CHART_GHCR}/tellagen-proxy@${chart_digest}" >/dev/null
 
+      - name: Package, push and sign the diagnosis-reader chart
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+        run: |
+          set -euo pipefail
+          scripts/package-reader-chart.sh "$VERSION" "$RUNNER_TEMP/release"
+          helm push "$RUNNER_TEMP/release/diagnosis-reader-${VERSION}.tgz" "oci://${CHART_GHCR}"
+          chart_digest="$(docker buildx imagetools inspect "${CHART_GHCR}/diagnosis-reader:${VERSION}" --format '{{ json .Manifest.Digest }}' | tr -d '"')"
+          [[ "$chart_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes "${CHART_GHCR}/diagnosis-reader@${chart_digest}"
+          cosign verify \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${CHART_GHCR}/diagnosis-reader@${chart_digest}" >/dev/null
+
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4
         with:
           name: tellagen-proxy-${{ steps.version.outputs.version }}
@@ -281,6 +301,7 @@ jobs:
             *) echo "::error::https://charts.tellagen.com/index.yaml answered ${status}. Not publishing without the previous index."; exit 1 ;;
           esac
           cp "$RUNNER_TEMP"/new/tellagen-proxy-*.tgz "$site/"
+          cp "$RUNNER_TEMP"/new/diagnosis-reader-*.tgz "$site/"
           if [ -f "$RUNNER_TEMP/previous-index.yaml" ]; then
             helm repo index "$site" --url https://charts.tellagen.com --merge "$RUNNER_TEMP/previous-index.yaml"
           else
