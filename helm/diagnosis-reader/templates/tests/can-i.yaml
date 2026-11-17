@@ -108,11 +108,13 @@ spec:
               serviceaccount:*) as="--as=system:${subject}" ;;
             esac
             # shellcheck disable=SC2086
-            answer=$(kubectl auth can-i "$@" $scope $as 2>/dev/null || true)
+            answer=$(kubectl auth can-i "$@" $scope $as 2>/tmp/home/err || true)
             if [ "$answer" = "$expected" ]; then
               echo "ok    $subject $scope $* -> $answer"
             else
               echo "FAIL  $subject $scope $* -> ${answer:-no answer}, expected $expected"
+              # The error kubectl printed, so a failed run says why.
+              head -c 400 /tmp/home/err
               failed=1
             fi
           }
