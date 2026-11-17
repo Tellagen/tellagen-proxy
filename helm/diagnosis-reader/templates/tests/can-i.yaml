@@ -85,6 +85,7 @@ metadata:
 spec:
   restartPolicy: Never
   serviceAccountName: {{ $testName }}
+  automountServiceAccountToken: true
   securityContext:
     runAsNonRoot: true
     runAsUser: 65532
@@ -99,6 +100,14 @@ spec:
       args:
         - |
           failed=0
+          # Talk to the API server with the pod's own service account token, so
+          # kubectl never falls back to a default address.
+          sa=/var/run/secrets/kubernetes.io/serviceaccount
+          if [ ! -r "$sa/token" ]; then
+            echo "FAIL  the test pod has no readable service account token at $sa"
+            exit 1
+          fi
+          kube="--server=https://kubernetes.default.svc --certificate-authority=$sa/ca.crt --token=$(cat "$sa/token")"
           # check <expected> <subject> <scope> <can-i arguments>
           check() {
             expected=$1 subject=$2 scope=$3
@@ -108,7 +117,7 @@ spec:
               serviceaccount:*) as="--as=system:${subject}" ;;
             esac
             # shellcheck disable=SC2086
-            answer=$(kubectl auth can-i "$@" $scope $as 2>/tmp/home/err || true)
+            answer=$(kubectl $kube auth can-i "$@" $scope $as 2>/tmp/home/err || true)
             if [ "$answer" = "$expected" ]; then
               echo "ok    $subject $scope $* -> $answer"
             else
