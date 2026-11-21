@@ -207,6 +207,15 @@ func CheckDashboardUID(uid string) *Rejection {
 	return nil
 }
 
+// CheckAlertRuleUID refuses anything that is not the UID of an alert rule, which also becomes
+// part of an upstream URL path.
+func CheckAlertRuleUID(uid string) *Rejection {
+	if !dashboardUIDPattern.MatchString(uid) {
+		return refused("%q is not an alert rule uid", truncateForMessage(uid))
+	}
+	return nil
+}
+
 // CheckNamePattern checks the regex a metric name list is filtered by.
 func CheckNamePattern(pattern string) *Rejection {
 	if len(pattern) > MaxQueryBytes {

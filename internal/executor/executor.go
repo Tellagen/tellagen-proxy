@@ -183,6 +183,8 @@ func (e *Executor) execute(ctx context.Context, command protocol.Command) protoc
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	p.started = time.Now()
+	p.deadline, _ = ctx.Deadline()
 
 	if command.CommandID != "" {
 		defer e.track(command, p.datasource, cancel)()
@@ -199,7 +201,7 @@ func (e *Executor) execute(ctx context.Context, command protocol.Command) protoc
 		return e.callTool(ctx, limits, tool, toolArgs)
 	}
 	data, skipped, truncated, failure := p.run(call)
-	if ctx.Err() != nil {
+	if ctx.Err() != nil && !(p.baseDone && failure == nil && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
 		return contextResult(ctx)
 	}
 	if failure != nil {

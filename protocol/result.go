@@ -79,6 +79,8 @@ const (
 	DataDashboards   = "dashboards"
 	DataPanelQueries = "panel_queries"
 	DataAlertRules   = "alert_rules"
+	// DataAlertRuleVersions holds the version history of one alert rule.
+	DataAlertRuleVersions = "alert_rule_versions"
 )
 
 // ResultData is the reduced and redacted result of one command. Kind says which
@@ -97,6 +99,8 @@ type ResultData struct {
 	Dashboards            []Dashboard  `json:"dashboards,omitempty"`
 	PanelQueries          []PanelQuery `json:"panel_queries,omitempty"`
 	AlertRules            []AlertRule  `json:"alert_rules,omitempty"`
+	// AlertRuleVersions is newest first.
+	AlertRuleVersions []AlertRuleVersion `json:"alert_rule_versions,omitempty"`
 }
 
 // Series is one reduced line of a matrix. A nil value is a gap.
@@ -163,12 +167,56 @@ type PanelQuery struct {
 	Expr          string `json:"expr"`
 }
 
-// AlertRule is one Grafana alert rule.
+// AlertRule is one Grafana alert rule. Every field after Expr is optional: a proxy that
+// does not know it, or a Grafana that does not report it, leaves it out, and a reader treats
+// a missing field as unknown, never as a default.
 type AlertRule struct {
 	UID   string `json:"uid"`
 	Title string `json:"title"`
 	State string `json:"state,omitempty"`
 	Expr  string `json:"expr,omitempty"`
+	// Threshold is the condition of the rule, read from its threshold expression or its
+	// classic condition. It is left out when the rule has none or more than one, and when a
+	// math or other transform stands between the condition and the query.
+	Threshold *AlertThreshold `json:"threshold,omitempty"`
+	// For is how long the condition must hold before the rule fires, as Grafana writes it
+	// ("5m").
+	For    string            `json:"for,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
+	// Updated is when the current version of the rule was saved.
+	Updated time.Time `json:"updated,omitzero"`
+	// Version is the version number of the rule. It counts up with every save.
+	Version int `json:"version,omitempty"`
+	// DatasourceUID is the datasource of the query the rule reads, from the query node that
+	// its condition reaches through plain reduce nodes. It is left out when that is not
+	// certain.
+	DatasourceUID string `json:"datasource_uid,omitempty"`
+}
+
+// Alert threshold operators, as Grafana names them in an evaluator.
+const (
+	ThresholdGreaterThan  = "gt"
+	ThresholdLessThan     = "lt"
+	ThresholdWithinRange  = "within_range"
+	ThresholdOutsideRange = "outside_range"
+	ThresholdNoValue      = "no_value"
+)
+
+// AlertThreshold is the value an alert rule compares against. For gt and lt, Value is the
+// threshold. For within_range and outside_range, Value is the lower bound and To the upper
+// bound. For no_value there is no number and Value is 0.
+type AlertThreshold struct {
+	Op    string   `json:"op"`
+	Value float64  `json:"value"`
+	To    *float64 `json:"to,omitempty"`
+}
+
+// AlertRuleVersion is one saved version of an alert rule.
+type AlertRuleVersion struct {
+	Version   int             `json:"version"`
+	Updated   time.Time       `json:"updated,omitzero"`
+	Expr      string          `json:"expr,omitempty"`
+	Threshold *AlertThreshold `json:"threshold,omitempty"`
 }
 
 var (

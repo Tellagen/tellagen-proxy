@@ -96,7 +96,25 @@ func (s *stubGrafana) serve(w http.ResponseWriter, r *http.Request) {
 			{"id":3,"title":"Variable","type":"timeseries","datasource":{"uid":"$ds","type":"prometheus"},"targets":[{"refId":"A","expr":"up"}]}]},"meta":{}}`)
 	case strings.HasPrefix(path, "/api/prometheus/grafana/api/v1/rules"):
 		fmt.Fprint(w, `{"status":"success","data":{"groups":[{"name":"g","file":"f","folderUid":"f1","rules":[
-			{"uid":"a1","name":"Pool full","type":"alerting","state":"firing","health":"ok","query":"x","labels":{"severity":"page"}}]}]}}`)
+			{"uid":"a1","name":"Pool full","type":"alerting","state":"firing","health":"ok","duration":300,"labels":{"severity":"page","owner":"mari@example.ee"}},
+			{"uid":"a2","name":"Disk fill","type":"alerting","state":"normal","health":"ok"}]}]}}`)
+	case path == "/api/ruler/grafana/api/v1/rule/a1/versions":
+		// Oldest first on purpose: the proxy sorts them.
+		fmt.Fprint(w, `[
+			{"for":"5m","grafana_alert":{"uid":"a1","version":2,"updated":"2026-10-12T14:05:00.000Z","condition":"C","data":[
+				{"refId":"A","datasourceUid":"prom-prod","model":{"expr":"hikaricp_connections_active"}},
+				{"refId":"B","datasourceUid":"__expr__","model":{"type":"reduce","expression":"A","reducer":"last"}},
+				{"refId":"C","datasourceUid":"__expr__","model":{"type":"threshold","expression":"B","conditions":[{"evaluator":{"type":"gt","params":[20]}}]}}]}},
+			{"for":"5m","grafana_alert":{"uid":"a1","version":3,"updated":"2026-11-03T09:30:00.000Z","condition":"C","data":[
+				{"refId":"A","datasourceUid":"prom-prod","model":{"expr":"hikaricp_connections_active"}},
+				{"refId":"B","datasourceUid":"__expr__","model":{"type":"reduce","expression":"A","reducer":"last"}},
+				{"refId":"C","datasourceUid":"__expr__","model":{"type":"threshold","expression":"B","conditions":[{"evaluator":{"type":"gt","params":[40]}}]}}]}}]`)
+	case path == "/api/v1/provisioning/alert-rules/a2":
+		// A Grafana without a version endpoint still answers a plain read of the rule.
+		fmt.Fprint(w, `{"uid":"a2","title":"Disk fill","folderUID":"f1","ruleGroup":"g","orgID":1,"condition":"B","noDataState":"NoData","execErrState":"Error","for":"10m",
+			"data":[
+				{"refId":"A","datasourceUid":"prom-prod","model":{"expr":"node_filesystem_used_ratio"}},
+				{"refId":"B","datasourceUid":"__expr__","model":{"type":"classic_conditions","conditions":[{"evaluator":{"type":"gt","params":[90]},"query":{"params":["A"]},"reducer":{"type":"avg"}}]}}]}`)
 	default:
 		http.NotFound(w, r)
 	}

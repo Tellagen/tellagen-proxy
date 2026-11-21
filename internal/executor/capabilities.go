@@ -45,6 +45,7 @@ var capabilityTools = map[string]*mcpgrafana.Tool{
 	protocol.CapabilityGrafanaSearchDashboards:   &tools.SearchDashboards,
 	protocol.CapabilityGrafanaGetPanelQueries:    &tools.GetDashboardPanelQueries,
 	protocol.CapabilityGrafanaListAlertRules:     &tools.AlertRulesRead,
+	protocol.CapabilityGrafanaAlertRuleVersions:  &tools.AlertRulesRead,
 }
 
 // toolCaller calls one tool and returns the JSON text of its answer.
@@ -58,6 +59,12 @@ type plan struct {
 	explore    *exploreLink
 	// logQuery is set for a Loki query, whose series labels can hold log text.
 	logQuery *guard.LogQuery
+	// started and deadline are set when the command starts to run. A plan that reads more than
+	// one thing uses them to keep part of the time for its main answer.
+	started, deadline time.Time
+	// baseDone is set by a plan whose main answer is read, so a deadline that passes while it
+	// reads extra details does not turn that answer into a timeout.
+	baseDone bool
 	run      func(call toolCaller) (data *protocol.ResultData, skipped []string, truncated bool, failure *callFailure)
 }
 
@@ -135,6 +142,8 @@ func (e *Executor) prepare(view *policy.View, capability string, args protocol.A
 		return preparePanelQueries(base, tool, typed, limits, view)
 	case *protocol.GrafanaListAlertRulesArgs:
 		return prepareAlertRules(base, tool, typed, limits)
+	case *protocol.GrafanaAlertRuleVersionsArgs:
+		return prepareAlertRuleVersions(base, tool, typed, limits)
 	}
 	return nil, &guard.Rejection{Code: protocol.CodePolicyCapabilityDisabled, Message: fmt.Sprintf("capability %q has no executor", capability)}
 }
@@ -560,20 +569,60 @@ func prepareAlertRules(p plan, tool *mcpgrafana.Tool, args *protocol.GrafanaList
 			return nil, nil, false, failure
 		}
 		var found []struct {
-			UID   string `json:"uid"`
-			Title string `json:"title"`
-			State string `json:"state"`
-			Query string `json:"query"`
+			UID    string            `json:"uid"`
+			Title  string            `json:"title"`
+			State  string            `json:"state"`
+			Query  string            `json:"query"`
+			For    string            `json:"for"`
+			Labels map[string]string `json:"labels"`
 		}
 		if err := json.Unmarshal([]byte(text), &found); err != nil {
 			return nil, nil, false, decodeFailure(tool)
 		}
 		rules := make([]protocol.AlertRule, 0, len(found))
 		for _, one := range found {
-			rules = append(rules, protocol.AlertRule{UID: one.UID, Title: one.Title, State: one.State, Expr: one.Query})
+			rules = append(rules, protocol.AlertRule{UID: one.UID, Title: one.Title, State: one.State, Expr: one.Query, For: shortDuration(one.For), Labels: one.Labels})
 		}
 		kept, truncated := reduce.Items(rules, limits)
-		return &protocol.ResultData{Kind: protocol.DataAlertRules, AlertRules: kept}, nil, truncated, nil
+		p.baseDone = true
+		reader := &detailReader{call: call, tool: tool, started: p.started, deadline: p.deadline}
+		skipped := reader.addDetails(kept)
+		return &protocol.ResultData{Kind: protocol.DataAlertRules, AlertRules: kept}, skipped, truncated, nil
+	}
+	return &p, nil
+}
+
+// prepareAlertRuleVersions reads the version history of one rule. Where Grafana has no
+// version endpoint the answer is an error that says so, never an empty list that would read
+// as a rule that never changed.
+func prepareAlertRuleVersions(p plan, tool *mcpgrafana.Tool, args *protocol.GrafanaAlertRuleVersionsArgs, limits protocol.Limits) (*plan, *guard.Rejection) {
+	if rejection := guard.CheckAlertRuleUID(args.UID); rejection != nil {
+		return nil, rejection
+	}
+	p.query = args.UID
+	toolArgs := map[string]any{"operation": "versions", "rule_uid": args.UID}
+	p.run = func(call toolCaller) (*protocol.ResultData, []string, bool, *callFailure) {
+		text, failure := call(tool, toolArgs)
+		if failure != nil {
+			if failure.code == protocol.CodeUpstream4xx {
+				failure.message = "no version history came back: the rule was not found, or Grafana is older than 12"
+			}
+			return nil, nil, false, failure
+		}
+		entries, err := ruleVersions(text)
+		if err != nil {
+			return nil, nil, false, decodeFailure(tool)
+		}
+		versions := make([]protocol.AlertRuleVersion, len(entries))
+		for i, entry := range entries {
+			versions[i] = entry.AlertRuleVersion
+		}
+		maxVersions := protocol.MaxAlertRuleVersions
+		if limits.MaxItems > 0 {
+			maxVersions = min(maxVersions, limits.MaxItems)
+		}
+		kept, truncated := reduce.Items(versions, protocol.Limits{MaxItems: maxVersions})
+		return &protocol.ResultData{Kind: protocol.DataAlertRuleVersions, AlertRuleVersions: kept}, nil, truncated, nil
 	}
 	return &p, nil
 }
