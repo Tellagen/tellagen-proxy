@@ -25,6 +25,8 @@ const (
 	CapabilityGrafanaSearchDashboards   = "grafana.search_dashboards"
 	CapabilityGrafanaGetPanelQueries    = "grafana.get_dashboard_panel_queries"
 	CapabilityGrafanaListAlertRules     = "grafana.list_alert_rules"
+	// CapabilityGrafanaAlertRuleVersions reads the version history of one alert rule.
+	CapabilityGrafanaAlertRuleVersions = "grafana.alert_rule_versions"
 )
 
 // Capability families. A family is the part of the name before the dot.
@@ -138,6 +140,10 @@ var capabilityCatalog = []catalogEntry{
 		Capability{CapabilityGrafanaListAlertRules, 1, Limits{MaxItems: 100, TimeoutMS: queryTimeoutMS, MaxResultBytes: resultBytesLimit}},
 		func() Args { return &GrafanaListAlertRulesArgs{} },
 	},
+	{
+		Capability{CapabilityGrafanaAlertRuleVersions, 1, Limits{MaxItems: MaxAlertRuleVersions, TimeoutMS: queryTimeoutMS, MaxResultBytes: resultBytesLimit}},
+		func() Args { return &GrafanaAlertRuleVersionsArgs{} },
+	},
 }
 
 // Capabilities returns every capability with the binary's ceilings, sorted by
@@ -168,7 +174,7 @@ func IsDiscoveryCapability(name string) bool {
 	case CapabilityPrometheusListMetricNames, CapabilityPrometheusListLabelValues,
 		CapabilityLokiListLabelValues, CapabilityGrafanaListDatasources,
 		CapabilityGrafanaSearchDashboards, CapabilityGrafanaGetPanelQueries,
-		CapabilityGrafanaListAlertRules:
+		CapabilityGrafanaListAlertRules, CapabilityGrafanaAlertRuleVersions:
 		return true
 	}
 	return false
@@ -353,4 +359,17 @@ type GrafanaListAlertRulesArgs struct {
 // Summary implements Args.
 func (a *GrafanaListAlertRulesArgs) Summary() ArgsSummary {
 	return ArgsSummary{Query: a.Query}
+}
+
+// MaxAlertRuleVersions is how many versions of one rule grafana.alert_rule_versions returns.
+const MaxAlertRuleVersions = 20
+
+// GrafanaAlertRuleVersionsArgs are the arguments of grafana.alert_rule_versions.
+type GrafanaAlertRuleVersionsArgs struct {
+	UID string `json:"uid"`
+}
+
+// Summary implements Args.
+func (a *GrafanaAlertRuleVersionsArgs) Summary() ArgsSummary {
+	return ArgsSummary{Query: a.UID}
 }

@@ -127,7 +127,12 @@ func TestEveryCapabilityRunsThroughTheStub(t *testing.T) {
 			}
 		}},
 		{protocol.CapabilityGrafanaListAlertRules, protocol.GrafanaListAlertRulesArgs{}, func(t *testing.T, data *protocol.ResultData) {
-			if data.Kind != protocol.DataAlertRules || len(data.AlertRules) != 1 || data.AlertRules[0].Title != "Pool full" {
+			if data.Kind != protocol.DataAlertRules || len(data.AlertRules) != 2 || data.AlertRules[0].Title != "Pool full" {
+				t.Errorf("data = %+v", data)
+			}
+		}},
+		{protocol.CapabilityGrafanaAlertRuleVersions, protocol.GrafanaAlertRuleVersionsArgs{UID: "a1"}, func(t *testing.T, data *protocol.ResultData) {
+			if data.Kind != protocol.DataAlertRuleVersions || len(data.AlertRuleVersions) != 2 || data.AlertRuleVersions[0].Version != 3 {
 				t.Errorf("data = %+v", data)
 			}
 		}},
@@ -951,6 +956,7 @@ func TestAnswerInAnotherShapeIsAnError(t *testing.T) {
 		{protocol.CapabilityGrafanaSearchDashboards, protocol.GrafanaSearchDashboardsArgs{}},
 		{protocol.CapabilityGrafanaGetPanelQueries, protocol.GrafanaGetPanelQueriesArgs{DashboardUID: "d"}},
 		{protocol.CapabilityGrafanaListAlertRules, protocol.GrafanaListAlertRulesArgs{}},
+		{protocol.CapabilityGrafanaAlertRuleVersions, protocol.GrafanaAlertRuleVersionsArgs{UID: "a1"}},
 	}
 	for _, one := range args {
 		encoded, _ := json.Marshal(one.args)

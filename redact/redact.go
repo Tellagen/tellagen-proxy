@@ -457,6 +457,17 @@ func (r *Redactor) Data(data *protocol.ResultData) Counts {
 		data.AlertRules[i].State = stripNUL(data.AlertRules[i].State)
 		data.AlertRules[i].Title = r.Text(data.AlertRules[i].Title, counts)
 		data.AlertRules[i].Expr = r.Text(data.AlertRules[i].Expr, counts)
+		data.AlertRules[i].For = stripNUL(data.AlertRules[i].For)
+		data.AlertRules[i].Labels = r.Labels(data.AlertRules[i].Labels, counts)
+		if threshold := data.AlertRules[i].Threshold; threshold != nil {
+			threshold.Op = stripNUL(threshold.Op)
+		}
+	}
+	for i := range data.AlertRuleVersions {
+		data.AlertRuleVersions[i].Expr = r.Text(data.AlertRuleVersions[i].Expr, counts)
+		if threshold := data.AlertRuleVersions[i].Threshold; threshold != nil {
+			threshold.Op = stripNUL(threshold.Op)
+		}
 	}
 	return counts
 }

@@ -245,6 +245,9 @@ func TestFit(t *testing.T) {
 		"alert rules": func(n int) *protocol.ResultData {
 			return &protocol.ResultData{AlertRules: make([]protocol.AlertRule, n)}
 		},
+		"alert rule versions": func(n int) *protocol.ResultData {
+			return &protocol.ResultData{AlertRuleVersions: make([]protocol.AlertRuleVersion, n)}
+		},
 	}
 	for name, build := range builders {
 		t.Run(name, func(t *testing.T) {

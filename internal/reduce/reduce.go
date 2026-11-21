@@ -344,6 +344,8 @@ func dropItems(data *protocol.ResultData, size, maxBytes int) bool {
 		data.PanelQueries = data.PanelQueries[:len(data.PanelQueries)-count(len(data.PanelQueries))]
 	case len(data.AlertRules) > 0:
 		data.AlertRules = data.AlertRules[:len(data.AlertRules)-count(len(data.AlertRules))]
+	case len(data.AlertRuleVersions) > 0:
+		data.AlertRuleVersions = data.AlertRuleVersions[:len(data.AlertRuleVersions)-count(len(data.AlertRuleVersions))]
 	default:
 		return false
 	}

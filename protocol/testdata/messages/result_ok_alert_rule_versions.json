@@ -1,0 +1,12 @@
+{
+  "attempt_token": "at_kd", "status": "ok", "duration_ms": 80,
+  "data": {"kind": "alert_rule_versions",
+           "alert_rule_versions": [
+             {"version": 4, "updated": "2026-11-03T09:30:00Z",
+              "expr": "sum(rate(http_requests_total{service=\"checkout-api\",code=~\"5..\"}[5m]))",
+              "threshold": {"op": "gt", "value": 5}},
+             {"version": 3, "updated": "2026-10-12T14:05:00Z",
+              "expr": "sum(rate(http_requests_total{service=\"checkout-api\",code=~\"5..\"}[5m]))",
+              "threshold": {"op": "gt", "value": 50}}]},
+  "truncated": false, "bytes": 420, "redactions": 0
+}

@@ -318,7 +318,9 @@ func TestNULBytesLeaveEveryFieldOnBothRedactors(t *testing.T) {
 				Datasources:  []protocol.Datasource{{UID: nul, Name: nul, Type: nul}},
 				Dashboards:   []protocol.Dashboard{{UID: nul, Title: nul, Folder: nul}},
 				PanelQueries: []protocol.PanelQuery{{Title: nul, DatasourceUID: nul, Expr: nul}},
-				AlertRules:   []protocol.AlertRule{{UID: nul, Title: nul, State: nul, Expr: nul}},
+				AlertRules: []protocol.AlertRule{{UID: nul, Title: nul, State: nul, Expr: nul, For: nul,
+					Labels: map[string]string{"k": nul}, Threshold: &protocol.AlertThreshold{Op: nul}}},
+				AlertRuleVersions: []protocol.AlertRuleVersion{{Expr: nul, Threshold: &protocol.AlertThreshold{Op: nul}}},
 			},
 		}
 	}
@@ -476,7 +478,9 @@ func fullResult() *protocol.CommandResult {
 			Datasources:  []protocol.Datasource{{UID: "prom-prod", Name: "Owner " + corpusEmail, Type: "prometheus"}},
 			Dashboards:   []protocol.Dashboard{{UID: "d1", Title: "Owner " + corpusEmail, Folder: corpusEmail}},
 			PanelQueries: []protocol.PanelQuery{{PanelID: 1, Title: corpusEmail, DatasourceUID: "prom-prod", Expr: `up{instance="` + corpusIPv4 + `"}`}},
-			AlertRules:   []protocol.AlertRule{{UID: "a1", Title: corpusEmail, Expr: `up{instance="` + corpusIPv4 + `"}`}},
+			AlertRules: []protocol.AlertRule{{UID: "a1", Title: corpusEmail, Expr: `up{instance="` + corpusIPv4 + `"}`,
+				Labels: map[string]string{"owner": corpusEmail, "service": "checkout"}}},
+			AlertRuleVersions: []protocol.AlertRuleVersion{{Version: 2, Expr: `up{instance="` + corpusIPv4 + `"}`}},
 		},
 	}
 }

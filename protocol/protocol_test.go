@@ -24,30 +24,46 @@ var fixtureDigests = map[string]string{
 	"1": "f3a4eb867bcd7f290a52aea370f88433f6bc6e8badcb4d1ff76b116dab60f028",
 }
 
+// addedFixtureDigests pins files that were added to a version after its release, as the
+// capability that came with them. The digest in fixtureDigests covers the released files only
+// and never changes, so a proxy of the release keeps speaking what it shipped. A new file may
+// join a version as a new entry here; an entry is never edited or removed.
+var addedFixtureDigests = map[string]struct {
+	files  []string
+	digest string
+}{
+	"1/alert_rule_details": {
+		files:  []string{"testdata/args/grafana.alert_rule_versions.json", "testdata/messages/result_ok_alert_rule_versions.json", "testdata/messages/result_ok_alert_rules_detail.json"},
+		digest: "38a78727285519a6e823d2002ef5a6c355ba2bf6dce4cc0e39c2c846a686c795",
+	},
+}
+
 // messageFixtures maps each golden file to the message it holds.
 var messageFixtures = map[string]func() any{
-	"session_reply.json":           func() any { return &SessionReply{} },
-	"hello.json":                   func() any { return &Hello{} },
-	"hello_reply.json":             func() any { return &HelloReply{} },
-	"poll_request.json":            func() any { return &PollRequest{} },
-	"poll_reply.json":              func() any { return &PollReply{} },
-	"poll_reply_empty.json":        func() any { return &PollReply{} },
-	"result_ok_matrix.json":        func() any { return &CommandResult{} },
-	"result_ok_vector.json":        func() any { return &CommandResult{} },
-	"result_ok_logs.json":          func() any { return &CommandResult{} },
-	"result_ok_patterns.json":      func() any { return &CommandResult{} },
-	"result_ok_names.json":         func() any { return &CommandResult{} },
-	"result_ok_datasources.json":   func() any { return &CommandResult{} },
-	"result_ok_dashboards.json":    func() any { return &CommandResult{} },
-	"result_ok_panel_queries.json": func() any { return &CommandResult{} },
-	"result_ok_alert_rules.json":   func() any { return &CommandResult{} },
-	"result_partial.json":          func() any { return &CommandResult{} },
-	"result_rejected.json":         func() any { return &CommandResult{} },
-	"result_error.json":            func() any { return &CommandResult{} },
-	"result_cancelled.json":        func() any { return &CommandResult{} },
-	"result_accepted.json":         func() any { return &AcceptedReply{} },
-	"error_upgrade_required.json":  func() any { return &ErrorReply{} },
-	"error_revoked.json":           func() any { return &ErrorReply{} },
+	"session_reply.json":                 func() any { return &SessionReply{} },
+	"hello.json":                         func() any { return &Hello{} },
+	"hello_reply.json":                   func() any { return &HelloReply{} },
+	"poll_request.json":                  func() any { return &PollRequest{} },
+	"poll_reply.json":                    func() any { return &PollReply{} },
+	"poll_reply_empty.json":              func() any { return &PollReply{} },
+	"result_ok_matrix.json":              func() any { return &CommandResult{} },
+	"result_ok_vector.json":              func() any { return &CommandResult{} },
+	"result_ok_logs.json":                func() any { return &CommandResult{} },
+	"result_ok_patterns.json":            func() any { return &CommandResult{} },
+	"result_ok_names.json":               func() any { return &CommandResult{} },
+	"result_ok_datasources.json":         func() any { return &CommandResult{} },
+	"result_ok_dashboards.json":          func() any { return &CommandResult{} },
+	"result_ok_panel_queries.json":       func() any { return &CommandResult{} },
+	"result_ok_alert_rules.json":         func() any { return &CommandResult{} },
+	"result_ok_alert_rules_detail.json":  func() any { return &CommandResult{} },
+	"result_ok_alert_rule_versions.json": func() any { return &CommandResult{} },
+	"result_partial.json":                func() any { return &CommandResult{} },
+	"result_rejected.json":               func() any { return &CommandResult{} },
+	"result_error.json":                  func() any { return &CommandResult{} },
+	"result_cancelled.json":              func() any { return &CommandResult{} },
+	"result_accepted.json":               func() any { return &AcceptedReply{} },
+	"error_upgrade_required.json":        func() any { return &ErrorReply{} },
+	"error_revoked.json":                 func() any { return &ErrorReply{} },
 }
 
 func readFixture(t *testing.T, path string) []byte {
@@ -105,7 +121,7 @@ func TestGoldenFixturesCannotChangeWithoutAVersionBump(t *testing.T) {
 			return walkErr
 		}
 		if !entry.IsDir() {
-			files = append(files, path)
+			files = append(files, filepath.ToSlash(path))
 		}
 		return nil
 	})
@@ -113,21 +129,41 @@ func TestGoldenFixturesCannotChangeWithoutAVersionBump(t *testing.T) {
 		t.Fatalf("walk fixtures: %v", err)
 	}
 	sort.Strings(files)
-	digest := sha256.New()
-	for _, path := range files {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
+	fileDigest := func(names []string) string {
+		digest := sha256.New()
+		for _, path := range names {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			digest.Write([]byte(path + "\n"))
+			digest.Write(raw)
 		}
-		digest.Write([]byte(filepath.ToSlash(path) + "\n"))
-		digest.Write(raw)
+		return hex.EncodeToString(digest.Sum(nil))
 	}
-	got := hex.EncodeToString(digest.Sum(nil))
+	added := map[string]bool{}
+	for key, entry := range addedFixtureDigests {
+		if !strings.HasPrefix(key, ProtocolVersion+"/") {
+			continue
+		}
+		for _, path := range entry.files {
+			added[path] = true
+		}
+		if got := fileDigest(entry.files); got != entry.digest {
+			t.Fatalf("the files added as %s changed: digest %s, pinned %s. An added file is pinned once; never edit it", key, got, entry.digest)
+		}
+	}
+	var released []string
+	for _, path := range files {
+		if !added[path] {
+			released = append(released, path)
+		}
+	}
 	want, ok := fixtureDigests[ProtocolVersion]
 	if !ok {
 		t.Fatalf("no fixture digest for protocol version %s", ProtocolVersion)
 	}
-	if got != want {
+	if got := fileDigest(released); got != want {
 		t.Fatalf("the golden files changed: digest %s, pinned %s. A changed message needs a new ProtocolVersion and SchemaHello, with a new digest entry; never edit the digest of a released version", got, want)
 	}
 }
@@ -238,7 +274,7 @@ func TestEmptyDatasourceListSurvivesTheWire(t *testing.T) {
 
 func TestCapabilityCatalog(t *testing.T) {
 	want := []string{
-		"grafana.get_dashboard_panel_queries", "grafana.list_alert_rules", "grafana.list_datasources", "grafana.search_dashboards",
+		"grafana.alert_rule_versions", "grafana.get_dashboard_panel_queries", "grafana.list_alert_rules", "grafana.list_datasources", "grafana.search_dashboards",
 		"loki.list_label_values", "loki.query_patterns", "loki.query_range",
 		"prometheus.list_label_values", "prometheus.list_metric_names", "prometheus.query_instant", "prometheus.query_range",
 	}
@@ -296,6 +332,7 @@ func TestGoldenArgsParseStrictlyAndSummarize(t *testing.T) {
 		CapabilityGrafanaSearchDashboards:   {Query: "checkout"},
 		CapabilityGrafanaGetPanelQueries:    {Query: "checkout"},
 		CapabilityGrafanaListAlertRules:     {Query: "checkout"},
+		CapabilityGrafanaAlertRuleVersions:  {Query: "rule-5xx"},
 	}
 	for _, capability := range Capabilities() {
 		t.Run(capability.Name, func(t *testing.T) {
